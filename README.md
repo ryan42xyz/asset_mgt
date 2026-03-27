@@ -45,6 +45,14 @@ The result is that this platform can ingest from *any* financial institution —
 - **SPY dashboard** — S&P 500 price + technical indicator view
 - **FIRE calculator** — projects months to financial independence given current savings rate and target
 
+## Screenshots
+
+![Portfolio Dashboard](docs/screenshots/dashboard-portfolio.png)
+
+![SPY Market Dashboard](docs/screenshots/dashboard-spy-market.png)
+
+![FIRE Calculator](docs/screenshots/dashboard-fire-calculator.png)
+
 ---
 
 ## Data Flow
@@ -59,25 +67,18 @@ Screenshot + LLM extraction (OCR service)
 Manual review + corrections
         │
         ▼
-Import API  ──────────────────────────────────────────────────────────┐
-                                                                       │
-                                                    ┌──────────────────▼──────────────┐
-                                                    │   PostgreSQL                     │
-                                                    │   holdings / price history       │
-                                                    │   risk gate state                │
-                                                    └──────────────────┬──────────────┘
-                                                                       │
-Yahoo Finance (live prices) ──► Redis cache ──────────────────────────┤
-                                                                       │
-                                                    ┌──────────────────▼──────────────┐
-                                                    │   FastAPI                        │
-                                                    │   strategy engine                │
-                                                    │   rebalancing math               │
-                                                    └──────────────────┬──────────────┘
-                                                                       │
-                                                    ┌──────────────────▼──────────────┐
-                                                    │   Browser dashboard              │
-                                                    └─────────────────────────────────┘
+Import API
+        │
+        ▼
+SQLite (app.db) — holdings, price history, risk gate state
+        │
+Yahoo Finance (live prices) ──► In-memory cache
+        │
+        ▼
+FastAPI — strategy engine, rebalancing math
+        │
+        ▼
+Browser dashboard
 ```
 
 ---
@@ -109,7 +110,7 @@ Clears after S&P 500 closes above 200-day SMA for 10 consecutive days. The idea:
 
 ## Quick Start
 
-**Prerequisites:** Docker, Python 3.11+
+**Prerequisites:** Python 3.11+ (no Docker required)
 
 ```bash
 git clone <this-repo>
@@ -167,19 +168,47 @@ FastAPI (port 8000)
 ├── /api/v1/ocr         — screenshot → structured holdings extraction
 └── /api/v1/fire        — FIRE projection calculations
 
-PostgreSQL (port 5432)  — holdings, price history, risk gate state
-Redis (port 6379)       — price + indicator cache (60s TTL)
+app.db (SQLite)         — holdings, price history, risk gate state
+In-memory cache         — price + indicator cache (60s TTL, cleared on restart)
 ```
 
 Market prices come from Yahoo Finance (free, ~15-min delay during market hours). Optional Alpha Vantage / IEX Cloud for more frequent updates.
 
 ---
 
+## Project Structure
+
+```
+asset_mgt/
+├── app/                    # FastAPI application
+│   ├── api/                # Route handlers (portfolio, strategy, market, ocr, fire)
+│   ├── models/             # SQLAlchemy models
+│   ├── services/           # Business logic (market data, strategy, OCR)
+│   ├── schemas/            # Pydantic request/response models
+│   ├── static/             # Frontend HTML pages
+│   └── main.py
+├── docs/
+│   ├── screenshots/        # UI screenshots
+│   └── system_design.md    # Architecture and design notes
+├── scripts/                # Data import and maintenance scripts
+│   ├── fix_fund_price.sh
+│   ├── remove_interactive_holdings.sh
+│   ├── update_holdings_fix.sh
+│   └── input_data_demo.txt
+├── tests/
+│   └── test_system.py
+├── tools/                  # Utility scripts (OCR helpers, web scrapers)
+├── .env.example
+├── docker-compose.yml      # Optional: PostgreSQL override
+├── requirements.txt
+└── start.sh
+```
+
 ## Development
 
 ```bash
 # Run system tests
-venv/bin/python3 test_system.py
+venv/bin/python3 tests/test_system.py
 
 # API docs
 open http://localhost:8000/docs
