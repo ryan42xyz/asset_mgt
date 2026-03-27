@@ -1,95 +1,62 @@
 """
-Redis client for caching
+In-memory TTL cache (drop-in replacement for Redis).
+
+For a single-process personal tool this is simpler and has no external
+dependency. Restart clears the cache, which is fine — data is in SQLite.
 """
 
-import json
-import redis
+import time
 from typing import Any, Optional
-from ..config import settings
 
 
-class RedisClient:
-    """Redis client wrapper"""
-    
+class InMemoryCache:
+    """Simple TTL-based in-memory cache."""
+
     def __init__(self):
-        self.redis = redis.from_url(settings.redis_url, decode_responses=True)
-    
+        # key -> (value, expire_at_epoch_seconds | None)
+        self._store: dict = {}
+
+    def _expired(self, key: str) -> bool:
+        _, exp = self._store[key]
+        return exp is not None and time.time() > exp
+
     def get(self, key: str) -> Optional[Any]:
-        """Get value from cache"""
-        try:
-            value = self.redis.get(key)
-            if value:
-                return json.loads(value)
+        if key not in self._store:
             return None
-        except Exception as e:
-            print(f"Redis get error: {e}")
+        if self._expired(key):
+            del self._store[key]
             return None
-    
+        return self._store[key][0]
+
     def set(self, key: str, value: Any, ttl: int = 3600) -> bool:
-        """Set value in cache with TTL"""
-        try:
-            return self.redis.setex(key, ttl, json.dumps(value, default=str))
-        except Exception as e:
-            print(f"Redis set error: {e}")
-            return False
-    
+        self._store[key] = (value, time.time() + ttl)
+        return True
+
     def delete(self, key: str) -> bool:
-        """Delete key from cache"""
-        try:
-            return bool(self.redis.delete(key))
-        except Exception as e:
-            print(f"Redis delete error: {e}")
-            return False
-    
+        return self._store.pop(key, None) is not None
+
     def exists(self, key: str) -> bool:
-        """Check if key exists in cache"""
-        try:
-            return bool(self.redis.exists(key))
-        except Exception as e:
-            print(f"Redis exists error: {e}")
-            return False
-    
+        return self.get(key) is not None
+
+    # Hash helpers kept for interface compatibility (stored as plain dicts)
     def set_hash(self, key: str, field: str, value: Any, ttl: int = 3600) -> bool:
-        """Set hash field with TTL"""
-        try:
-            self.redis.hset(key, field, json.dumps(value, default=str))
-            self.redis.expire(key, ttl)
-            return True
-        except Exception as e:
-            print(f"Redis hset error: {e}")
-            return False
-    
+        bucket = self.get(key) or {}
+        bucket[field] = value
+        return self.set(key, bucket, ttl)
+
     def get_hash(self, key: str, field: str) -> Optional[Any]:
-        """Get hash field value"""
-        try:
-            value = self.redis.hget(key, field)
-            if value:
-                return json.loads(value)
-            return None
-        except Exception as e:
-            print(f"Redis hget error: {e}")
-            return None
-    
+        bucket = self.get(key)
+        return bucket.get(field) if bucket else None
+
     def get_all_hash(self, key: str) -> dict:
-        """Get all hash fields"""
-        try:
-            hash_data = self.redis.hgetall(key)
-            return {k: json.loads(v) for k, v in hash_data.items()}
-        except Exception as e:
-            print(f"Redis hgetall error: {e}")
-            return {}
-    
+        return self.get(key) or {}
+
     def ping(self) -> bool:
-        """Test Redis connection"""
-        try:
-            return self.redis.ping()
-        except Exception as e:
-            print(f"Redis ping error: {e}")
-            return False
+        return True
 
 
-# Global Redis client instance
-redis_client = RedisClient()
+# Global cache instance
+redis_client = InMemoryCache()
 
 
 # Cache key generators

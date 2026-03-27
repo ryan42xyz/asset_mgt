@@ -3,17 +3,14 @@ set -e
 
 cd "$(dirname "$0")"
 
-echo "Starting dependencies (Postgres + Redis)..."
-docker-compose up -d
-
-echo "Waiting for Postgres to be ready..."
-until docker-compose exec -T postgres pg_isready -U postgres -q 2>/dev/null; do
-  sleep 1
-done
-
-echo "Starting API server on http://localhost:8000 ..."
-# Load .env if present (export all vars)
+# Load .env if present
 if [ -f .env ]; then
   set -a; source .env; set +a
 fi
+
+echo "Starting Asset Management Platform..."
+echo "Dashboard: http://localhost:8000"
+echo "Data:      ./app.db  (SQLite, persists locally)"
+echo ""
+
 venv/bin/uvicorn app.main:app --reload --port 8000

@@ -6,19 +6,18 @@ import os
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-# Build async-compatible URL from env (convert postgresql:// → postgresql+asyncpg://)
-_raw_url = os.environ.get(
+# Default: SQLite file in project root. Override via DATABASE_URL env var.
+SQLALCHEMY_DATABASE_URL = os.environ.get(
     "DATABASE_URL",
-    "postgresql://postgres:password@localhost:5432/assetmgmt"
-)
-SQLALCHEMY_DATABASE_URL = _raw_url.replace(
-    "postgresql://", "postgresql+asyncpg://", 1
+    "sqlite+aiosqlite:///./app.db"
 )
 
 # Create async engine
 engine = create_async_engine(
     SQLALCHEMY_DATABASE_URL,
     echo=False,
+    # SQLite needs check_same_thread=False when used with async
+    connect_args={"check_same_thread": False} if SQLALCHEMY_DATABASE_URL.startswith("sqlite") else {},
 )
 
 # Create async session maker

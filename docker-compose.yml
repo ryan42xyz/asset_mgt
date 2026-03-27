@@ -1,3 +1,5 @@
+# Optional: only needed if you want to use PostgreSQL instead of the default SQLite.
+# For normal use, just run ./start.sh — no Docker required.
 version: '3.8'
 
 services:
@@ -18,20 +20,5 @@ services:
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:6
-    container_name: assetmgmt_redis
-    ports:
-      - "6379:6379"
-    command: redis-server --appendonly yes
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
 volumes:
   postgres_data:
-  redis_data: 

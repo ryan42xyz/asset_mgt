@@ -16,11 +16,8 @@ class Settings(BaseSettings):
     app_version: str = "1.0.0"
     debug: bool = False
     
-    # Database
-    database_url: str = "postgresql://postgres:password@localhost:5432/assetmgmt"
-    
-    # Redis
-    redis_url: str = "redis://localhost:6379/0"
+    # Database (SQLite by default; override with DATABASE_URL env var)
+    database_url: str = "sqlite+aiosqlite:///./app.db"
     
     # Security
     secret_key: str = "your-secret-key-here"
