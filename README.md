@@ -1,5 +1,7 @@
 # Personal Asset Management Platform
 
+**[English]** · [中文](README_CN.md)
+
 A self-hosted investment dashboard for US stock investors — built because no existing tool does exactly what I need, and because AI makes it practical to build one that does.
 
 ---
