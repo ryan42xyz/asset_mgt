@@ -1,0 +1,4 @@
+[
+  { "symbol": "SPY",  "shares": 10, "cost_basis": 400.00 },
+  { "symbol": "NVDA", "shares": 5,  "cost_basis": 120.00 }
+]

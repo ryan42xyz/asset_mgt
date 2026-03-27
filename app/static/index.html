@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Portfolio Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        body { padding: 20px; background-color: #f8f9fa; }
+        .card { box-shadow: 0 0.125rem 0.25rem rgba(0,0,0,0.075); }
+        .card-header { background-color: #fff; border-bottom: 1px solid rgba(0,0,0,0.05); }
+        pre { background-color:#f8f9fa; padding:10px; margin:0; }
+    </style>
+</head>
+<body>
+<div class="container-fluid">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
+        <h2 class="mb-0 me-3">Portfolio Dashboard</h2>
+        <div class="d-flex gap-2">
+            <div class="input-group" style="width: auto;">
+                <span class="input-group-text">Symbol</span>
+                <input type="text" id="symbolInput" class="form-control form-control-sm" value="SPY" style="width: 70px;">
+                <button class="btn btn-primary btn-sm" id="fetchPriceBtn">Get Price</button>
+            </div>
+            <a href="/spy-dashboard" class="btn btn-success btn-sm">SPY Dashboard</a>
+            <a href="/fire-calc" class="btn btn-warning btn-sm">
+                <i class="fas fa-fire"></i> FIRE计算器
+            </a>
+        </div>
+        <div class="text-muted ms-auto">Auto-refresh: <span id="countdown">60</span>s</div>
+    </div>
+
+    <!-- Price result -->
+    <div id="priceResult" class="alert alert-info d-none" role="alert"></div>
+
+    <div class="row g-4">
+        <!-- Left Column -->
+        <div class="col-lg-8">
+            <!-- Charts Row -->
+            <div class="row mb-4">
+                <!-- Portfolio Allocation Chart -->
+                <div class="col-lg-8">
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">Portfolio Allocation (Stocks Only)</h5>
+                                <div class="text-muted" id="totalValue">Total: ¥ -</div>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="allocBar" height="300"></canvas>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Asset Distribution Pie Chart -->
+                <div class="col-lg-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">Asset Distribution</h5>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="assetPie" height="300"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Consolidated Stocks Table -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">All Stocks (by Market Value)</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0" id="consolidatedTable">
+                            <thead>
+                                <tr>
+                                    <th class="text-start" style="width: 15%">Symbol</th>
+                                    <th class="text-end" style="width: 10%">Shares</th>
+                                    <th class="text-end" style="width: 15%">Current</th>
+                                    <th class="text-end" style="width: 20%">Market Value</th>
+                                    <th class="text-end" style="width: 15%">Position %</th>
+                                    <th class="text-end" style="width: 25%">P/L</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                            <tfoot>
+                                <tr class="table-secondary fw-bold">
+                                    <td class="text-start">Total</td>
+                                    <td class="text-end"></td>
+                                    <td class="text-end"></td>
+                                    <td class="text-end" id="totalMarketValue"></td>
+                                    <td class="text-end">100.00%</td>
+                                    <td class="text-end" id="totalPnL"></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Holdings by Broker -->
+            <div id="brokersDiv"></div>
+        </div>
+
+        <!-- Right Column -->
+        <div class="col-lg-4">
+            <!-- Quick Update Panel -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-edit"></i> 快速更新持仓</h5>
+                </div>
+                <div class="card-body">
+                    <form id="quickUpdateForm">
+                        <div class="mb-3">
+                            <label for="updateBroker" class="form-label">券商</label>
+                            <select class="form-select form-select-sm" id="updateBroker" required>
+                                <option value="">选择券商</option>
+                                <option value="长桥">长桥</option>
+                                <option value="老虎证券">老虎证券</option>
+                                <option value="中国银行（香港）">中国银行（香港）</option>
+                                <option value="微众银行">微众银行</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="updateSymbol" class="form-label">Symbol</label>
+                            <input type="text" class="form-control form-control-sm" id="updateSymbol" placeholder="如: VOO" required>
+                        </div>
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <label for="updateShares" class="form-label">股数</label>
+                                <input type="number" class="form-control form-control-sm" id="updateShares" step="0.01" placeholder="如: 40" required>
+                            </div>
+                            <div class="col-6">
+                                <label for="updateCost" class="form-label">每股成本</label>
+                                <input type="number" class="form-control form-control-sm" id="updateCost" step="0.01" placeholder="如: 560" required>
+                            </div>
+                        </div>
+                        <div class="mt-3">
+                            <button type="submit" class="btn btn-primary btn-sm w-100">
+                                <i class="fas fa-save"></i> 更新持仓
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+const USER_ID = 1;  // Demo user (auto-seeded at startup)
+const REFRESH_INTERVAL = 60;  // seconds
+let allocChart = null;
+let countdown = REFRESH_INTERVAL;
+let currentExchangeRate = 1;
+
+// Format currency with the original currency from database
+function formatCurrency(value, currency = "USD") {
+    if (value === null || value === undefined) return '-';
+    
+    return new Intl.NumberFormat('en-US', { 
+        style: 'currency', 
+        currency: currency,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }).format(value);
+}
+
+// Convert any currency value to USD for totals
+function convertToUSD(value, sourceCurrency = "USD") {
+    if (value === null || value === undefined) return 0;
+    
+    if (sourceCurrency === "CNY") {
+        return value / currentExchangeRate;
+    }
+    return value;  // Already USD or default
+}
+
+// Format percentage
+function formatPercent(value) {
+    return new Intl.NumberFormat('en', {
+        style: 'percent',
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1
+    }).format(value);
+}
+
+async function fetchExchangeRate() {
+    try {
+        const response = await fetch('/api/v1/market/exchange-rate/USD/CNY');
+        const data = await response.json();
+        currentExchangeRate = data.rate || 7.2; // 使用默认汇率如果获取失败
+        return currentExchangeRate;
+    } catch (error) {
+        console.error('Error fetching exchange rate:', error);
+        return 7.2; // 默认汇率
+    }
+}
+
+async function fetchData() {
+    try {
+        // 首先获取汇率
+        await fetchExchangeRate();
+
+        // Fetch dashboard data
+        const dashRaw = await fetch(`/api/v1/strategy/dashboard/${USER_ID}`).then(r => r.json());
+        const holdingsResp = await fetch(`/api/v1/portfolio/${USER_ID}/holdings`).then(r => r.json());
+
+        // Normalize dashboard data – backend may wrap in {data: {...}} or return flat
+        const dash = dashRaw.data ? dashRaw.data : dashRaw;
+
+        // API may return a bare list or an object with a `data` field
+        const holdings = Array.isArray(holdingsResp) ? holdingsResp : (holdingsResp.data || []);
+        
+
+
+        // Update allocation chart
+        const allocation = (dash.allocation && dash.allocation.allocation) ? dash.allocation.allocation : {};
+        const labels = [], data = [], colors = [];
+        for (const cat in allocation) {
+            labels.push(cat);
+            data.push((allocation[cat].current_weight * 100).toFixed(1));
+            // Different colors for different categories
+            colors.push(cat.includes('cash') ? '#20c997' : 
+                       cat.includes('defensive') ? '#ffc107' :
+                       cat.includes('high_beta') ? '#fd7e14' : '#0d6efd');
+        }
+
+        // Bar chart with enhanced tooltips
+        const barCtx=document.getElementById('allocBar').getContext('2d');
+        const targetData = [], currentData=[];
+        for(const cat of labels){
+            const info = allocation[cat];
+            targetData.push((info? (info.target_weight*100):0).toFixed(1));
+            currentData.push((info? (info.current_weight*100):0).toFixed(1));
+        }
+        new Chart(barCtx,{
+            type:'bar',
+            data:{
+                labels:labels,
+                datasets:[
+                    {
+                        label:'Target %',
+                        data:targetData,
+                        backgroundColor:'#adb5bd'
+                    },
+                    {
+                        label:'Current %',
+                        data:currentData,
+                        backgroundColor:'#0d6efd'
+                    }
+                ]
+            },
+            options:{
+                scales:{
+                    y:{
+                        ticks:{
+                            callback:(v)=>v+'%'
+                        }
+                    }
+                },
+                plugins:{
+                    tooltip:{
+                        callbacks:{
+                            label: function(context) {
+                                const catName = context.chart.data.labels[context.dataIndex];
+                                const info = allocation[catName];
+                                const label = context.dataset.label;
+                                const value = context.raw;
+                                
+                                if (label === 'Current %') {
+                                    let lines = [`${label}: ${value}%`];
+                                    if (info && info.holdings) {
+                                        lines.push('Holdings:');
+                                        info.holdings.forEach(h => {
+                                            const marketValue = h.market_value;
+                                            const weight = (h.weight * 100).toFixed(1);
+                                            const shares = h.shares;
+                                            lines.push(`  ${h.symbol}: ${weight}% (${shares} shares, ${formatCurrency(marketValue)})`);
+                                        });
+                                    }
+                                    if (info) {
+                                        lines.push(`Target: ${(info.target_weight * 100).toFixed(1)}%`);
+                                        const deviation = info.deviation * 100;
+                                        const deviationText = deviation >= 0 ? `+${deviation.toFixed(1)}%` : `${deviation.toFixed(1)}%`;
+                                        lines.push(`Deviation: ${deviationText}`);
+                                        if (Math.abs(deviation) > 5) {
+                                            const action = deviation > 0 ? 'Reduce' : 'Increase';
+                                            const amount = Math.abs(info.deviation * dash.allocation.total_value);
+                                            lines.push(`Suggestion: ${action} by ${formatCurrency(amount)}`);
+                                        }
+                                    }
+                                    return lines;
+                                }
+                                return `${label}: ${value}%`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        // Update asset distribution pie chart
+        const assetDistribution = dash.asset_distribution || {stocks: 0, insurance: 0, cash: 0};
+        const pieLabels = ['Stocks', 'Insurance', 'Cash'];
+        const pieData = [
+            assetDistribution.stocks || 0,
+            assetDistribution.insurance || 0,
+            assetDistribution.cash || 0
+        ];
+        const pieColors = ['#0d6efd', '#dc3545', '#20c997'];
+        
+        // Create or update pie chart
+        const pieCtx = document.getElementById('assetPie').getContext('2d');
+        if (window.assetPieChart) {
+            window.assetPieChart.destroy();
+        }
+        
+        window.assetPieChart = new Chart(pieCtx, {
+            type: 'pie',
+            data: {
+                labels: pieLabels,
+                datasets: [{
+                    data: pieData,
+                    backgroundColor: pieColors,
+                    borderWidth: 2,
+                    borderColor: '#fff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.parsed;
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const percentage = ((value / total) * 100).toFixed(1);
+                                return `${label}: ${formatCurrency(value)} (${percentage}%)`;
+                            }
+                        }
+                    },
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            padding: 20,
+                            usePointStyle: true
+                        }
+                    }
+                }
+            }
+        });
+
+        // Update total value (convert all to USD)
+        if (holdings) {
+            const totalUSD = holdings.reduce((sum, h) => {
+                const value = h.market_value || 0;
+                return sum + convertToUSD(value, h.currency);
+            }, 0);
+            document.getElementById('totalValue').textContent = `Total: ${formatCurrency(totalUSD, "USD")}`;
+        }
+
+        // ----------- Category & Broker view -------------
+        function getCategory(sym){
+            if(sym.includes('INSURANCE') || sym === 'BOC_HK_INSURANCE') return 'Insurance';
+            if(sym.startsWith('CASH') || (sym.endsWith('_RMB') && sym !== 'BOC_HK_INSURANCE')) return 'Cash';
+            return 'Stocks';
+        }
+
+        const categories = {};
+        holdings.forEach(h => {
+            const cat = getCategory(h.symbol);
+            if(!categories[cat]) categories[cat] = {};
+            const broker = h.broker_name || 'Unknown';
+            if(!categories[cat][broker]) categories[cat][broker] = [];
+            categories[cat][broker].push(h);
+        });
+
+        let html = '';
+        for(const cat in categories){
+            const brokers = categories[cat];
+            // Calculate category total in USD for comparison
+            const catTotalUSD = Object.values(brokers).reduce((t,list)=> t + list.reduce((s,h)=> s + convertToUSD(h.market_value||0, h.currency),0),0);
+            html += `<div class="card mb-4">
+                        <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">${cat}</h5>
+                            <div>${formatCurrency(catTotalUSD, "USD")}</div>
+                        </div>
+                        <div class="card-body p-2">`;
+            
+            for(const broker in brokers) {
+                const list = brokers[broker];
+                // Calculate broker total in USD
+                const totalUSD = list.reduce((sum,h)=> sum + convertToUSD(h.market_value||0, h.currency),0);
+                html += `<div class="card mb-3">
+                            <div class="card-header">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <strong>${broker}</strong>
+                                    <span class="text-muted">${formatCurrency(totalUSD, "USD")}</span>
+                                </div>
+                            </div>
+                            <div class="card-body p-0">
+                            <div class="table-responsive">
+                            <table class="table table-sm table-hover mb-0">
+                            <thead><tr><th class="text-start">Symbol</th><th class="text-end">Shares</th><th class="text-end">Cost</th><th class="text-end">Current</th><th class="text-end">Market Value</th><th class="text-end">Position %</th><th class="text-end">P/L</th></tr></thead><tbody>`;
+                
+                // Sort holdings by position percentage (top down)
+                const sortedList = list.sort((a, b) => {
+                    const aUSD = convertToUSD(a.market_value || 0, a.currency);
+                    const bUSD = convertToUSD(b.market_value || 0, b.currency);
+                    const totalUSD = list.reduce((sum, h) => sum + convertToUSD(h.market_value || 0, h.currency), 0);
+                    const aPositionPct = totalUSD > 0 ? (aUSD / totalUSD * 100) : 0;
+                    const bPositionPct = totalUSD > 0 ? (bUSD / totalUSD * 100) : 0;
+                    return bPositionPct - aPositionPct; // Sort descending (top down)
+                });
+                
+                sortedList.forEach(h=>{
+                   const pnl = h.unrealized_pnl || 0;
+                   const pnlPct = h.unrealized_pnl_percent || 0;
+                   const listTotalUSD = list.reduce((sum,h)=> sum + convertToUSD(h.market_value||0, h.currency),0);
+                   const positionPct = listTotalUSD>0? (convertToUSD(h.market_value||0, h.currency)/listTotalUSD*100).toFixed(2):'0.00';
+                   const avgCostPrice = h.shares > 0 ? h.cost_basis / h.shares : 0;
+                   html += `<tr><td class="text-start">${h.symbol}</td><td class="text-end">${h.shares}</td><td class="text-end">${formatCurrency(avgCostPrice, h.currency)}</td><td class="text-end">${h.current_price?formatCurrency(h.current_price, h.currency):'-'}</td><td class="text-end">${h.market_value?formatCurrency(h.market_value, h.currency):'-'}</td><td class="text-end">${positionPct}%</td><td class="text-end ${pnl>=0?'text-success':'text-danger'}">${formatCurrency(pnl, h.currency)} (${formatPercent(pnlPct/100)})</td></tr>`;
+                });
+                html += `</tbody></table></div></div></div>`;
+            }
+            html += `</div></div>`;
+        }
+        document.getElementById('brokersDiv').innerHTML = html;
+
+        // Update consolidated table
+        const consolidatedTableBody = document.getElementById('consolidatedTable').querySelector('tbody');
+        consolidatedTableBody.innerHTML = '';
+
+        const stockRows = holdings.filter(h => getCategory(h.symbol)==='Stocks');
+        const totalMarketValueUSD = stockRows.reduce((sum,h)=> {
+            return sum + convertToUSD(h.market_value || 0, h.currency);
+        }, 0);
+        const totalPnLUSD = stockRows.reduce((sum,h)=> {
+            return sum + convertToUSD(h.unrealized_pnl || 0, h.currency);
+        }, 0);
+
+        // sort by market value desc (USD equivalent)
+        stockRows.sort((a,b)=> {
+            const aUSD = convertToUSD(a.market_value || 0, a.currency);
+            const bUSD = convertToUSD(b.market_value || 0, b.currency);
+            return bUSD - aUSD;
+        });
+
+        stockRows.forEach(h => {
+            const row = consolidatedTableBody.insertRow();
+            const marketValueUSD = convertToUSD(h.market_value || 0, h.currency);
+            const avgCostPrice = h.shares > 0 ? h.cost_basis / h.shares : 0;
+            
+            // Calculate position percentage based on actual market value
+            const positionPct = totalMarketValueUSD > 0 ? `${(marketValueUSD/totalMarketValueUSD*100).toFixed(2)}%` : '0.00%';
+            
+            const cells = [
+                { content: h.symbol, class: 'text-start' },
+                { content: h.shares.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 2}), class: 'text-end' },
+                { content: formatCurrency(h.current_price, h.currency), class: 'text-end' },
+                { content: formatCurrency(h.market_value, h.currency), class: 'text-end' },
+                { content: positionPct, class: 'text-end' },
+                { content: `${formatCurrency(h.unrealized_pnl, h.currency)} (${formatPercent(h.unrealized_pnl_percent/100)})`, class: `text-end ${(h.unrealized_pnl||0)>=0 ? 'text-success' : 'text-danger'}` }
+            ];
+
+            cells.forEach(({content, class: className}) => {
+                const cell = row.insertCell();
+                cell.textContent = content;
+                cell.className = className;
+            });
+        });
+
+        // Update totals (show in USD)
+        document.getElementById('totalMarketValue').textContent = formatCurrency(totalMarketValueUSD, "USD");
+        document.getElementById('totalPnL').textContent = formatCurrency(totalPnLUSD, "USD");
+        document.getElementById('totalPnL').className = `text-end ${totalPnLUSD>=0 ? 'text-success' : 'text-danger'}`;
+
+
+
+    } catch (error) {
+        console.error('Error fetching data:', error);
+    }
+}
+
+// Auto refresh
+function updateCountdown() {
+    document.getElementById('countdown').textContent = countdown;
+    if (countdown <= 0) {
+        countdown = REFRESH_INTERVAL;
+        fetchData();
+    } else {
+        countdown--;
+    }
+}
+
+// Initial load
+fetchData();
+setInterval(updateCountdown, 1000);
+
+// Currency selection removed - showing original currency from database
+
+// --- Price fetch logic ---
+document.getElementById('fetchPriceBtn').addEventListener('click', async () => {
+    const symbolInput = document.getElementById('symbolInput');
+    const symbol = symbolInput.value.trim().toUpperCase();
+    if (!symbol) return;
+
+    const resultDiv = document.getElementById('priceResult');
+    resultDiv.classList.remove('alert-success', 'alert-danger');
+    resultDiv.classList.add('alert-info');
+    resultDiv.textContent = `Fetching ${symbol} ...`;
+    resultDiv.classList.remove('d-none');
+
+    try {
+        const res = await fetch(`/api/v1/market/prices/${symbol}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        const data = json.data || json;
+        const price = data.price ?? data.regularMarketPrice ?? null;
+        if (price === null) throw new Error('No price field');
+
+        resultDiv.classList.remove('alert-info');
+        resultDiv.classList.add('alert-success');
+        resultDiv.textContent = `${symbol} current price: ${formatCurrency(price)}`;
+
+        // Refresh holdings data in DB then reload dashboard
+        try {
+            await fetch(`/api/v1/portfolio/${USER_ID}/refresh-prices`, {method: 'POST'});
+            // Re-fetch dashboard to reflect new prices
+            await fetchData();
+        } catch(e) { console.error('Failed to refresh holdings:', e); }
+
+    } catch (err) {
+        resultDiv.classList.remove('alert-info');
+        resultDiv.classList.add('alert-danger');
+        resultDiv.textContent = `Failed to fetch ${symbol}: ${err}`;
+    }
+});
+
+// Quick Update Functions
+async function updateHolding() {
+    const formData = {
+        broker_name: document.getElementById('updateBroker').value,
+        symbol: document.getElementById('updateSymbol').value.toUpperCase(),
+        shares: parseFloat(document.getElementById('updateShares').value),
+        cost_per_share: parseFloat(document.getElementById('updateCost').value)
+    };
+
+    // Validate inputs
+    if (!formData.broker_name || !formData.symbol || !formData.shares || !formData.cost_per_share) {
+        showAlert('请填写所有必填字段', 'warning');
+        return;
+    }
+
+    if (formData.shares <= 0 || formData.cost_per_share <= 0) {
+        showAlert('股数和成本必须大于0', 'warning');
+        return;
+    }
+
+    try {
+        // Calculate total cost basis
+        const cost_basis = formData.shares * formData.cost_per_share;
+        
+        // First, try to find existing holding
+        const response = await fetch(`/api/v1/portfolio/${USER_ID}/holdings`);
+        const holdings = await response.json();
+        
+        const existingHolding = holdings.find(h => 
+            h.symbol === formData.symbol && h.broker_name === formData.broker_name
+        );
+
+        if (existingHolding) {
+            // Update existing holding
+            const updateResponse = await fetch(`/api/v1/portfolio/${USER_ID}/holdings/${existingHolding.id}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    shares: formData.shares,
+                    cost_basis: cost_basis,
+                    current_price: existingHolding.current_price // Keep current price
+                })
+            });
+
+            if (updateResponse.ok) {
+                showAlert(`成功更新 ${formData.symbol} 持仓！`, 'success');
+                document.getElementById('quickUpdateForm').reset();
+                
+                // Refresh prices to recalculate market value and P&L
+                try {
+                    await fetch('/api/v1/market/refresh-prices', { method: 'POST' });
+                    console.log('Prices refreshed successfully');
+                } catch (priceError) {
+                    console.log('Price refresh failed:', priceError);
+                }
+                
+                await fetchData(); // Refresh dashboard
+            } else {
+                const error = await updateResponse.json();
+                showAlert(`更新失败: ${error.detail}`, 'danger');
+            }
+        } else {
+            // Create new holding
+            const createResponse = await fetch(`/api/v1/portfolio/${USER_ID}/holdings`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    symbol: formData.symbol,
+                    shares: formData.shares,
+                    cost_basis: cost_basis,
+                    broker_name: formData.broker_name,
+                    currency: "USD"
+                })
+            });
+
+            if (createResponse.ok) {
+                showAlert(`成功创建 ${formData.symbol} 持仓！`, 'success');
+                document.getElementById('quickUpdateForm').reset();
+                
+                // Refresh prices to recalculate market value and P&L
+                try {
+                    await fetch('/api/v1/market/refresh-prices', { method: 'POST' });
+                    console.log('Prices refreshed successfully');
+                } catch (priceError) {
+                    console.log('Price refresh failed:', priceError);
+            }
+                
+                await fetchData(); // Refresh dashboard
+            } else {
+                const error = await createResponse.json();
+                showAlert(`创建失败: ${error.detail}`, 'danger');
+            }
+        }
+    } catch (error) {
+        console.error('Error updating holding:', error);
+        showAlert(`操作失败: ${error.message}`, 'danger');
+    }
+}
+
+function showAlert(message, type) {
+    // Remove existing alerts
+    const existingAlerts = document.querySelectorAll('.alert');
+    existingAlerts.forEach(alert => alert.remove());
+
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    const container = document.querySelector('.container-fluid');
+    container.insertBefore(alertDiv, container.firstChild);
+    
+    // Auto remove after 5 seconds
+    setTimeout(() => {
+        if (alertDiv.parentNode) {
+            alertDiv.remove();
+        }
+    }, 5000);
+}
+
+// Event listeners for quick update form
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('quickUpdateForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        updateHolding();
+    });
+});
+</script>
+</body>
+</html> 
